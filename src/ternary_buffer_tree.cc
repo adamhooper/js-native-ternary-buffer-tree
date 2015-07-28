@@ -7,6 +7,8 @@
 #include <node_object_wrap.h>
 #include <v8.h>
 
+#include "MemoryPool.h"
+
 using namespace v8;
 
 /**
@@ -24,17 +26,17 @@ struct SimpleString
 struct TSTNode
 {
   char ch;
-  bool isLeaf;
   TSTNode* left;
   TSTNode* eq;
   TSTNode* right;
+  bool isLeaf;
 
   explicit TSTNode(char aCh)
     : ch(aCh),
-      isLeaf(false),
       left(NULL),
       eq(NULL),
-      right(NULL) {}
+      right(NULL),
+      isLeaf(false) {}
 
   ~TSTNode()
   {
@@ -43,6 +45,8 @@ struct TSTNode
     if (this->right) delete this->right;
   }
 };
+
+static const size_t NodePoolChunkSize = 65536; // 4096 is slower, according to perf.js
 
 /**
  * Ternary search tree.
@@ -68,16 +72,17 @@ public:
   }
 
   explicit TST() : root(NULL) {}
-  ~TST() { if (this->root) delete this->root; }
 
 private:
   TSTNode* root;
+  MemoryPool<TSTNode,NodePoolChunkSize> pool;
 
   void _insert(TSTNode** nodeAddress, const char* s, size_t len) {
     char ch = *s;
 
     if (*nodeAddress == NULL) {
-      *nodeAddress = new TSTNode(ch); // deleted in dtors
+      *nodeAddress = pool.newElement(ch);
+      // All the nodes get deleted by the MemoryPool when we destroy the TST
     }
 
     TSTNode* node = *nodeAddress;
