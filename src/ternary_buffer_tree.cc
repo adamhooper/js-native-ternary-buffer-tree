@@ -125,11 +125,8 @@ private:
   const TSTNode* getNode(const char* s, size_t len) const {
     if (len == 0) return NULL; // We don't store zero-length strings
 
-    return this->_getNode(this->root, s, len); // recursive search
-  }
+    const TSTNode* node = this->root;
 
-  const TSTNode* _getNode(const TSTNode* node, const char* s, size_t len) const {
-    // Assume len > 0
     for (;;) {
       if (node == NULL) return NULL; // No match
 
