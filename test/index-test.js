@@ -27,4 +27,24 @@ describe('TernaryBufferTree', function() {
     expect(set.findAllMatches('the foo went over the moo', 1))
       .to.deep.eq([ 'foo', 'moo' ]);
   });
+
+  it('should return `undefined` from .get() when there are no values', function() {
+    var set = new Set(new Buffer('foo\nbar\nbaz', 'utf-8'));
+    expect(set.get('foo')).not.to.be.defined;
+    expect(set.get('moo')).not.to.be.defined;
+    // In other words: nothing is defined
+  });
+
+  it('should return values from `.get()` when there are values', function() {
+    var set = new Set(new Buffer('foo\tFOO\nbar\t\nbaz\tBAZ', 'utf-8'));
+    expect(set.get('foo')).to.eq('FOO');
+    expect(set.get('bar')).to.eq('');
+    expect(set.get('moo')).not.to.be.defined;
+  });
+
+  it('should ignore zero-length strings', function() {
+    var set = new Set(new Buffer('foo\n'));
+    expect(set.contains('foo')).to.be.true;
+    expect(set.contains('')).to.be.false;
+  });
 });

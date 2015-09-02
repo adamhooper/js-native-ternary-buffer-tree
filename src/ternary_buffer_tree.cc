@@ -2,6 +2,9 @@
 #include <deque>
 #include <vector>
 
+#include <iostream>
+#include <string>
+
 #include <node.h>
 #include <node_buffer.h>
 #include <node_object_wrap.h>
@@ -13,6 +16,10 @@ using namespace v8;
 
 /**
  * A string whose characters are stored elsewhere.
+ *
+ * The argument-free constructor will return a "null string". Basically, it's
+ * a hack that probably behaves the way you expect. (Its memory address is
+ * NULL.)
  */
 struct SimpleString
 {
@@ -21,6 +28,9 @@ struct SimpleString
 
   SimpleString(const char* aS, size_t aLen) : s(aS), len(aLen) {}
   SimpleString() : s(NULL), len(0) {}
+  SimpleString(const SimpleString& rhs) : s(rhs.s), len(rhs.len) {}
+
+  inline bool isNull() const { return s == NULL; }
 };
 
 struct TSTNode
@@ -29,14 +39,14 @@ struct TSTNode
   TSTNode* left;
   TSTNode* eq;
   TSTNode* right;
-  bool isLeaf;
+  const SimpleString* value; // value != NULL iff this is a leaf node
 
   explicit TSTNode(char aCh)
     : ch(aCh),
       left(NULL),
       eq(NULL),
       right(NULL),
-      isLeaf(false) {}
+      value(NULL) {}
 
   ~TSTNode()
   {
@@ -57,18 +67,32 @@ static const size_t NodePoolChunkSize = 65536; // 4096 is slower, according to p
 class TST
 {
 public:
-  void insert(const char* s, size_t len)
+  void insert(const SimpleString& key, const SimpleString* value)
   {
-    if (len == 0) return; // We don't store zero-length strings
+    if (key.len == 0) return; // We don't store zero-length strings
 
-    this->_insert(&this->root, s, len);
+    this->_insert(&this->root, key.s, key.len, value);
   }
 
   bool contains(const char* s, size_t len) const
   {
-    if (len == 0) return false; // We don't store zero-length strings
+    const TSTNode* node = this->getNode(s, len);
 
-    return this->_contains(this->root, s, len);
+    return node != NULL;
+  }
+
+  const SimpleString* get(const char* s, size_t len) const
+  {
+    const TSTNode* node = this->getNode(s, len);
+
+    if (node == NULL) {
+      return NULL;
+    } else if (node->value->isNull()) {
+      // Every leaf node has a value, but it might be a null string.
+      return NULL;
+    } else {
+      return node->value;
+    }
   }
 
   explicit TST() : root(NULL) {}
@@ -77,7 +101,7 @@ private:
   TSTNode* root;
   MemoryPool<TSTNode,NodePoolChunkSize> pool;
 
-  void _insert(TSTNode** nodeAddress, const char* s, size_t len) {
+  void _insert(TSTNode** nodeAddress, const char* s, size_t len, const SimpleString* value) {
     char ch = *s;
 
     if (*nodeAddress == NULL) {
@@ -88,29 +112,42 @@ private:
     TSTNode* node = *nodeAddress;
 
     if (ch < node->ch) {
-      this->_insert(&node->left, s, len);
+      this->_insert(&node->left, s, len, value);
     } else if (ch > node->ch) {
-      this->_insert(&node->right, s, len);
+      this->_insert(&node->right, s, len, value);
     } else if (len > 1) {
-      this->_insert(&node->eq, &s[1], len - 1);
+      this->_insert(&node->eq, &s[1], len - 1, value);
     } else {
-      node->isLeaf = true;
+      node->value = value;
     }
   }
 
-  bool _contains(TSTNode* node, const char* s, size_t len) const {
-    if (node == NULL) return false;
+  const TSTNode* getNode(const char* s, size_t len) const {
+    if (len == 0) return NULL; // We don't store zero-length strings
 
-    char ch = *s;
+    return this->_getNode(this->root, s, len); // recursive search
+  }
 
-    if (ch < node->ch) {
-      return this->_contains(node->left, s, len);
-    } else if (ch > node->ch) {
-      return this->_contains(node->right, s, len);
-    } else if (len > 1) {
-      return this->_contains(node->eq, &s[1], len - 1);
-    } else {
-      return node->isLeaf;
+  const TSTNode* _getNode(const TSTNode* node, const char* s, size_t len) const {
+    // Assume len > 0
+    for (;;) {
+      if (node == NULL) return NULL; // No match
+
+      char ch = *s;
+
+      if (ch < node->ch) {
+        node = node->left;
+      } else if (ch > node->ch) {
+        node = node->right;
+      } else if (len > 1) {
+        node = node->eq;
+        s++;
+        len--;
+      } else if (node->value != NULL) {
+        return node; // match
+      } else {
+        return NULL; // end of search
+      }
     }
   }
 };
@@ -120,11 +157,13 @@ public:
   static void Init(Handle<Object> exports);
   static Persistent<Function> constructor;
 
-  inline bool contains(const char* s, size_t len);
+  inline bool contains(const char* s, size_t len) const;
+  const SimpleString* get(const char* s, size_t len) const;
   std::vector<SimpleString> findAllMatches(const char* s, size_t len, size_t maxNgramSize);
 
 private:
   char* mem = NULL;
+  SimpleString* strings = NULL;
   TST tree;
 
   explicit TernaryBufferTree(const char* s, size_t len);
@@ -132,6 +171,7 @@ private:
 
   static void New(const FunctionCallbackInfo<Value>& args);
   static void Contains(const FunctionCallbackInfo<Value>& args);
+  static void Get(const FunctionCallbackInfo<Value>& args);
   static void FindAllMatches(const FunctionCallbackInfo<Value>& args);
 };
 
@@ -156,6 +196,12 @@ count_char_in_str(char ch, const char* s, size_t len) {
  * We assume the Strings are sorted. Insert the median first, then recurse.
  * That's described in "Better Insertion Orders" at
  * http://www.drdobbs.com/database/ternary-search-trees/184410528?pgno=2
+ *
+ * The `tokens` passed here are in *pairs*: that is, tokens[0] is a key,
+ * tokens[1] is its value; tokens[2] is the next key with tokens[3] as its
+ * value; etc. The `begin` and `end` describe the *pairs*, not the tokens:
+ * when `begin == end == 1`, then the key is `tokens[2]` and the value is
+ * `tokens[3]`.
  */
 static void
 insert_many(TST& tree, SimpleString tokens[], size_t begin, size_t end)
@@ -163,7 +209,7 @@ insert_many(TST& tree, SimpleString tokens[], size_t begin, size_t end)
   if (end == begin) return;
 
   size_t mid = (begin + end - 1) >> 1;
-  tree.insert(tokens[mid].s, tokens[mid].len);
+  tree.insert(tokens[mid * 2], &tokens[mid * 2 + 1]);
 
   if (mid > begin) insert_many(tree, tokens, begin, mid);
   if (mid < end - 1) insert_many(tree, tokens, mid + 1, end);
@@ -175,35 +221,56 @@ TernaryBufferTree::TernaryBufferTree(const char* s, size_t len)
   memcpy(this->mem, s, len);
 
   size_t nTokens = count_char_in_str('\n', s, len) + 1;
-  SimpleString* tokens = new SimpleString[nTokens];
+  this->strings = new SimpleString[nTokens * 2];
 
-  SimpleString* curToken = &tokens[0];
-  curToken->s = this->mem;
+  SimpleString* curString = &this->strings[0];
+  bool foundTabThisLine = false;
+
+  curString->s = this->mem;
 
   const char* end = this->mem + len;
   for (const char* p = this->mem; p < end; p++) {
-    if (*p == '\n') {
-      curToken->len = p - curToken->s;
-      curToken++;
-      curToken->s = &p[1];
+    switch (*p) {
+      case '\n':
+        curString->len = p - curString->s;
+        curString++;
+
+        if (!foundTabThisLine) {
+          curString++; // There's no value
+        }
+        foundTabThisLine = false;
+
+        curString->s = &p[1]; // Start parsing the next line
+        break;
+      case '\t':
+        curString->len = p - curString->s;
+        curString++;
+        foundTabThisLine = true;
+        curString->s = &p[1]; // Start parsing the value
+        break;
     }
   }
-  curToken->len = end - curToken->s;
+  curString->len = end - curString->s;
 
-  insert_many(this->tree, tokens, 0, nTokens);
-
-  delete tokens;
+  insert_many(this->tree, this->strings, 0, nTokens);
 }
 
 TernaryBufferTree::~TernaryBufferTree()
 {
-  if (this->mem) delete this->mem;
+  delete[] this->mem;
+  delete[] this->strings;
 }
 
 bool
-TernaryBufferTree::contains(const char* s, size_t len)
+TernaryBufferTree::contains(const char* s, size_t len) const
 {
   return this->tree.contains(s, len);
+}
+
+const SimpleString*
+TernaryBufferTree::get(const char* s, size_t len) const
+{
+  return this->tree.get(s, len);
 }
 
 std::vector<SimpleString>
@@ -250,6 +317,7 @@ TernaryBufferTree::Init(Handle<Object> exports) {
 
   // Prototype
   NODE_SET_PROTOTYPE_METHOD(tpl, "contains", Contains);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "get", Get);
   NODE_SET_PROTOTYPE_METHOD(tpl, "findAllMatches", FindAllMatches);
 
   constructor.Reset(isolate, tpl->GetFunction());
@@ -298,6 +366,33 @@ void TernaryBufferTree::Contains(const FunctionCallbackInfo<Value>& args) {
   }
 
   args.GetReturnValue().Set(ret);
+}
+
+void TernaryBufferTree::Get(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = Isolate::GetCurrent();
+  HandleScope scope(isolate);
+  TernaryBufferTree* obj = ObjectWrap::Unwrap<TernaryBufferTree>(args.Holder());
+
+  const SimpleString* result;
+
+  Local<Value> arg = args[0]; // Buffer or String
+
+  if (node::Buffer::HasInstance(arg)) {
+    // It's a buffer. Go char-by-char
+    const char* data(node::Buffer::Data(arg));
+    const size_t len(node::Buffer::Length(arg));
+
+    result = obj->get(data, len);
+  } else {
+    // We can convert it to utf-8. On failure, it's just an empty String.
+    String::Utf8Value argString(arg);
+    result = obj->get(*argString, argString.length());
+  }
+
+  if (result != NULL) {
+    Handle<String> ret(String::NewFromUtf8(isolate, result->s, String::NewStringType::kNormalString, result->len));
+    args.GetReturnValue().Set(ret);
+  }
 }
 
 void
