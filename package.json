@@ -1,6 +1,6 @@
 {
   "name": "js-native-ternary-buffer-tree",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "C++ ternary search tree, for Node Buffers",
   "main": "index.js",
   "directories": {
@@ -29,6 +29,7 @@
     "buffer",
     "sorted",
     "set",
+    "map",
     "string",
     "utf-8",
     "fast",
