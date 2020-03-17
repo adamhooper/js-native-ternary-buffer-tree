@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 
 function buildWordListBuffer() {
-  console.time('Building alphabetical word list')
+  console.log('Building alphabetical word list')
 
-  var alphabet = 'abcdefghijklmnopqrstuvwxyz';
-  var words = [];
-  var a, b, c, d, e, i;
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+  const words = [];
 
-  for (a = 0; a < 26; a++) {
-    for (b = 0; b < 26; b++) {
-      for (c = 0; c < 26; c++) {
-        for (d = 0; d < 26; d++) {
-          for (e = 0; e < 10; e++) {
+  for (let a = 0; a < 26; a++) {
+    for (let b = 0; b < 26; b++) {
+      for (let c = 0; c < 26; c++) {
+        for (let d = 0; d < 26; d++) {
+          for (let e = 0; e < 10; e++) {
             words.push(alphabet[a] + alphabet[b] + alphabet[c] + alphabet[d] + alphabet[e]);
           }
         }
@@ -19,42 +18,40 @@ function buildWordListBuffer() {
     }
   }
 
-  var tokensBuffer = Buffer.from(words.join('\n'), 'utf-8');
+  const tokensBuffer = Buffer.from(words.join('\n'), 'utf-8');
 
-  console.timeEnd('Building alphabetical word list');
   console.log('%d words, %d bytes', words.length, tokensBuffer.length);
   return tokensBuffer;
 }
 
 function buildSearchStringBuffer() {
-  console.time('Building search string')
+  console.log('Building search string')
 
-  var alphabet = 'abcdefghijklmnopqrstuvwxyz';
-  var searchWords = [];
-  var a, b, c, d;
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+  const searchWords = [];
 
-  for (a = 0; a < 26; a++) {
-    for (b = 0; b < 26; b++) {
-      for (c = 0; c < 26; c++) {
-        searchWords.push(alphabet[a] + 'b' + alphabet[c] + alphabet[d] + 'e');
+  for (let a = 0; a < 26; a++) {
+    for (let b = 0; b < 26; b++) {
+      for (let c = 0; c < 26; c++) {
+        searchWords.push(alphabet[a] + 'b' + alphabet[c] + 'de');
+        searchWords.push(alphabet[a] + 'b' + alphabet[c] + 'dx');
       }
     }
   }
 
-  var searchBuffer = Buffer.from(searchWords.join(' ', 'utf-8'));
+  const searchBuffer = Buffer.from(searchWords.join(' ', 'utf-8'));
 
-  console.timeEnd('Building search string');
   console.log('%d words, %d bytes', searchWords.length, searchBuffer.length);
 
   return searchBuffer;
 }
 
 function profileInitializeAndBuildSet(tokensBuffer) {
-  var Set = require('../index');
+  const Set = require('../index');
+  let set;
 
   console.time('Initializing tree 5 times');
-  var set;
-  for (i = 0; i < 5; i++) {
+  for (let i = 0; i < 5; i++) {
     set = new Set(tokensBuffer);
   }
   console.timeEnd('Initializing tree 5 times');
@@ -63,19 +60,21 @@ function profileInitializeAndBuildSet(tokensBuffer) {
 }
 
 function profileSearch(set, searchBuffer) {
-  console.time('Searching tree 2,000 times with maxNgramSize=4');
-  for (i = 0; i < 2000; i++) {
-    set.findAllMatches(searchBuffer, 2);
+  let ret
+
+  console.time('Searching tree 100 times with maxNgramSize=2');
+  for (let i = 0; i < 100; i++) {
+    ret = set.findAllMatches(searchBuffer, 2);
   }
-  console.timeEnd('Searching tree 2,000 times with maxNgramSize=4');
+  console.timeEnd('Searching tree 100 times with maxNgramSize=2');
+
+  console.log('Match length', ret.length, 'first match', ret[0]);
 }
 
 function profileAll() {
-  var tokensBuffer = buildWordListBuffer();
-
-  var searchBuffer = buildSearchStringBuffer();
-
-  var set = profileInitializeAndBuildSet(tokensBuffer);
+  const tokensBuffer = buildWordListBuffer();
+  const searchBuffer = buildSearchStringBuffer();
+  const set = profileInitializeAndBuildSet(tokensBuffer);
 
   profileSearch(set, searchBuffer);
 }
