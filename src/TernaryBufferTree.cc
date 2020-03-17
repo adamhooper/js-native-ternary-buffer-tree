@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <cstring> // memchr()
+#include <cstring> // memchr(), memcpy()
 #include <deque>
 #include <memory>
 #include <string_view>
@@ -43,12 +43,21 @@ struct StringHandle {
   const std::string_view view;
 };
 
+static bool
+valueIsStringLike(const Napi::Value& value)
+{
+  return value.IsBuffer() || value.IsArrayBuffer() || value.IsString();
+}
+
 static StringHandle
 valueToStringHandle(const Napi::Value& value)
 {
   if (value.IsBuffer()) {
     auto buf = value.As<Napi::Buffer<char>>();
     return { nullptr, std::string_view(buf.Data(), buf.Length()) };
+  } else if (value.IsArrayBuffer()) {
+    auto arrayBuf = value.As<Napi::ArrayBuffer>();
+    return { nullptr, std::string_view(reinterpret_cast<const char*>(arrayBuf.Data()), arrayBuf.ByteLength()) };
   } else {
     // Convert to String. 
     Napi::String jsString = value.IsString() ? value.As<Napi::String>() : value.ToString();
@@ -60,10 +69,14 @@ valueToStringHandle(const Napi::Value& value)
 }
 
 static Napi::Value
-stringViewToValue(const Napi::Env env, const std::string_view view, bool isBuffer)
+stringViewToValue(const Napi::Env env, const std::string_view view, const Napi::Value& valueWithTypeToCopy)
 {
-  if (isBuffer) {
+  if (valueWithTypeToCopy.IsBuffer()) {
     return Napi::Buffer<char>::Copy(env, view.data(), view.size());
+  } else if (valueWithTypeToCopy.IsArrayBuffer()) {
+    Napi::ArrayBuffer ret = Napi::ArrayBuffer::New(env, view.size());
+    memcpy(ret.Data(), view.data(), view.size());
+    return ret;
   } else {
     return Napi::String::New(env, view.data(), view.size());
   }
@@ -194,7 +207,7 @@ TernaryBufferTree::Contains(const Napi::CallbackInfo& info)
 {
   Napi::Env env(info.Env());
 
-  if (info.Length() != 1 || !(info[0].IsString() || info[0].IsBuffer())) {
+  if (info.Length() != 1 || !valueIsStringLike(info[0])) {
     Napi::TypeError::New(env, "Usage: tree.contains(<String or Buffer>)").ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -209,7 +222,7 @@ TernaryBufferTree::Get(const Napi::CallbackInfo& info)
 {
   Napi::Env env(info.Env());
 
-  if (info.Length() != 1 || !(info[0].IsString() || info[0].IsBuffer())) {
+  if (info.Length() != 1 || !valueIsStringLike(info[0])) {
     Napi::TypeError::New(env, "Usage: tree.get(<String or Buffer>)").ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -220,7 +233,7 @@ TernaryBufferTree::Get(const Napi::CallbackInfo& info)
     if (maybeOutView->data() == nullptr) { // default-ctor string_view
       return env.Null(); // user inserted null
     } else {
-      return stringViewToValue(env, maybeOutView.value(), info[0].IsBuffer());
+      return stringViewToValue(env, maybeOutView.value(), info[0]);
     }
   } else {
     return env.Undefined();
@@ -232,7 +245,7 @@ TernaryBufferTree::FindAllMatches(const Napi::CallbackInfo& info)
 {
   Napi::Env env(info.Env());
 
-  if (info.Length() != 2 || !(info[0].IsString() || info[0].IsBuffer()) || !info[1].IsNumber()) {
+  if (info.Length() != 2 || !valueIsStringLike(info[0]) || !info[1].IsNumber()) {
     Napi::TypeError::New(env, "Usage: tree.findAllMatches(<String or Buffer>, <Integer>)").ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -245,9 +258,8 @@ TernaryBufferTree::FindAllMatches(const Napi::CallbackInfo& info)
   Napi::Array retval = Napi::Array::New(env, retViews.size());
   uint32_t index(0);
 
-  bool isBuffer = info[0].IsBuffer();
   for (const std::string_view& sv : retViews) {
-    retval.Set(index, stringViewToValue(env, sv, isBuffer));
+    retval.Set(index, stringViewToValue(env, sv, info[0]));
     index++;
   }
 

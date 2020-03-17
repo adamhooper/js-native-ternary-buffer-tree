@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+const { TextEncoder } = require('util');
+
 function buildWordListBuffer() {
   console.log('Building alphabetical word list')
 
@@ -63,12 +65,19 @@ function profileContains(set, searchBuffer) {
   let ret
 
   const searchBuffers = searchBuffer.toString().split(' ').map(Buffer.from);
-
   console.time('100x tree.contains() with %d Buffers', searchBuffers.length);
   for (let i = 0; i < 100; i++) {
     searchBuffers.forEach(x => set.contains(x));
   }
   console.timeEnd('100x tree.contains() with %d Buffers', searchBuffers.length);
+
+  const utf8 = new TextEncoder();
+  const searchArrayBuffers = searchBuffer.toString().split(' ').map(x => utf8.encode(x))
+  console.time('100x tree.contains() with %d ArrayBuffers', searchArrayBuffers.length);
+  for (let i = 0; i < 100; i++) {
+    searchArrayBuffers.forEach(x => set.contains(x));
+  }
+  console.timeEnd('100x tree.contains() with %d ArrayBuffers', searchArrayBuffers.length);
 
   const searchStrings = searchBuffer.toString().split(' ');
   console.time('100x tree.contains() with %d Strings', searchStrings.length);
@@ -86,6 +95,13 @@ function profileSearch(set, searchBuffer) {
     ret = set.findAllMatches(searchBuffer, 2);
   }
   console.timeEnd('100x tree.findAllMatches() with Buffer and maxNgramSize=2');
+
+  const searchArrayBuffer = new TextEncoder().encode(searchBuffer.toString());
+  console.time('100x tree.findAllMatches() with ArrayBuffer and maxNgramSize=2');
+  for (let i = 0; i < 100; i++) {
+    ret = set.findAllMatches(searchArrayBuffer, 2);
+  }
+  console.timeEnd('100x tree.findAllMatches() with ArrayBuffer and maxNgramSize=2');
 
   const searchString = searchBuffer.toString();
   console.time('100x tree.findAllMatches() with String and maxNgramSize=2');
