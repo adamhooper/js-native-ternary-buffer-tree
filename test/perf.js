@@ -59,14 +59,40 @@ function profileInitializeAndBuildSet(tokensBuffer) {
   return set;
 }
 
+function profileContains(set, searchBuffer) {
+  let ret
+
+  const searchBuffers = searchBuffer.toString().split(' ').map(Buffer.from);
+
+  console.time('100x tree.contains() with %d Buffers', searchBuffers.length);
+  for (let i = 0; i < 100; i++) {
+    searchBuffers.forEach(x => set.contains(x));
+  }
+  console.timeEnd('100x tree.contains() with %d Buffers', searchBuffers.length);
+
+  const searchStrings = searchBuffer.toString().split(' ');
+  console.time('100x tree.contains() with %d Strings', searchStrings.length);
+  for (let i = 0; i < 100; i++) {
+    searchStrings.forEach(x => set.contains(x));
+  }
+  console.timeEnd('100x tree.contains() with %d Strings', searchStrings.length);
+}
+
 function profileSearch(set, searchBuffer) {
   let ret
 
-  console.time('Searching tree 100 times with maxNgramSize=2');
+  console.time('100x tree.findAllMatches() with Buffer and maxNgramSize=2');
   for (let i = 0; i < 100; i++) {
     ret = set.findAllMatches(searchBuffer, 2);
   }
-  console.timeEnd('Searching tree 100 times with maxNgramSize=2');
+  console.timeEnd('100x tree.findAllMatches() with Buffer and maxNgramSize=2');
+
+  const searchString = searchBuffer.toString();
+  console.time('100x tree.findAllMatches() with String and maxNgramSize=2');
+  for (let i = 0; i < 100; i++) {
+    ret = set.findAllMatches(searchString, 2);
+  }
+  console.timeEnd('100x tree.findAllMatches() with String and maxNgramSize=2');
 
   console.log('Match length', ret.length, 'first match', ret[0]);
 }
@@ -76,6 +102,7 @@ function profileAll() {
   const searchBuffer = buildSearchStringBuffer();
   const set = profileInitializeAndBuildSet(tokensBuffer);
 
+  profileContains(set, searchBuffer);
   profileSearch(set, searchBuffer);
 }
 
