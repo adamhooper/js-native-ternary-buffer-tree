@@ -2,11 +2,18 @@
   "targets": [
     {
       "target_name": "ternary_buffer_tree",
-      "sources": [ "src/ternary_buffer_tree.cc" ],
-      "cflags": [ "-std=c++11", "-Wall" ],
-      "xcode_settings": {
-        "OTHER_CFLAGS": [ "-std=c++11", "-Wall" ],
-      }
+      "include_dirs": ["<!@(node -p \"require('node-addon-api').include\")"],
+      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
+      "sources": [ "src/TernarySearchTree.cc", "src/TernaryBufferTree.cc", "src/addon.cc" ],
+      "cflags_cc": [ "-std=c++17", "-Wall" ],
+      "conditions": [
+        ['OS=="mac"', {
+          "cflags+": [ "-fvisibility=hidden" ],
+          "xcode_settings": {
+            "GCC_SYMBOLS_PRIVATE_EXTERN": "YES", # -fvisibility=hidden
+          },
+        }]
+      ],
     }
   ]
 }

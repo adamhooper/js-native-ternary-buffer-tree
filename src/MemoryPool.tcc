@@ -23,7 +23,10 @@
 #ifndef MEMORY_BLOCK_TCC
 #define MEMORY_BLOCK_TCC
 
+#include <cstdint>
+#include <utility>
 
+#include "MemoryPool.h" // allow compiling independently
 
 template <typename T, size_t BlockSize>
 inline typename MemoryPool<T, BlockSize>::size_type

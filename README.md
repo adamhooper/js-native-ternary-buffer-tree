@@ -67,5 +67,5 @@ Run `mocha -w` in the background as you implement features. Write tests in
 LICENSE
 -------
 
-AGPL-3.0. This project is (c) Overview Services Inc. Please contact us should
-you desire a more permissive license.
+AGPL-3.0. This project is (c) Overview Services Inc., Overview Computing Inc.
+Please contact us should you desire a more permissive license.

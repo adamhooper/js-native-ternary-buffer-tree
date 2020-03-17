@@ -19,7 +19,7 @@ function buildWordListBuffer() {
     }
   }
 
-  var tokensBuffer = new Buffer(words.join('\n'), 'utf-8');
+  var tokensBuffer = Buffer.from(words.join('\n'), 'utf-8');
 
   console.timeEnd('Building alphabetical word list');
   console.log('%d words, %d bytes', words.length, tokensBuffer.length);
@@ -41,7 +41,7 @@ function buildSearchStringBuffer() {
     }
   }
 
-  var searchBuffer = new Buffer(searchWords.join(' ', 'utf-8'));
+  var searchBuffer = Buffer.from(searchWords.join(' ', 'utf-8'));
 
   console.timeEnd('Building search string');
   console.log('%d words, %d bytes', searchWords.length, searchBuffer.length);
